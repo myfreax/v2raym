@@ -1,0 +1,110 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "stats": {},
+  "api": {
+    "services": [
+      "StatsService"
+    ],
+    "tag": "api"
+  },
+  "policy": {
+    "levels": {
+      "1": {
+        "handshake": 4,
+        "connIdle": 300,
+        "uplinkOnly": 2,
+        "downlinkOnly": 5,
+        "statsUserUplink": false,
+        "statsUserDownlink": false
+      }
+    },
+    "system": {
+      "statsInboundUplink": true,
+      "statsInboundDownlink": true
+    }
+  },
+  "allocate": {
+    "strategy": "always",
+    "refresh": 5,
+    "concurrency": 3
+  },
+  "inbounds": [
+    {
+      "port": 31291,
+      "listen": "127.0.0.1",
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "a4f7ef9b-6951-2397-098d-bb1e660b3805",
+            "alterId": 0,
+            "email": "313566117@qq.com"
+          },
+          {
+            "id": "94effe29-05af-4b35-a0bc-28065ac6fe9d-bak",
+            "alterId": 0,
+            "email": "5551395@qq.com"
+          },
+          {
+            "id": "117269e1-1258-4aa0-b7c5-50c1409f0014",
+            "alterId": 0,
+            "email": "1037711696@qq.com"
+          },
+          {
+            "id": "1d1f5042-5b16-47ef-9d5c-6fa94f732c4b",
+            "alterId": 0,
+            "email": "1298131250@qq.com"
+          },
+          {
+            "id": "f056a386-c896-48e8-a0c1-67b24dc8c0f6",
+            "alterId": 0,
+            "email": "1096042230@qq.com"
+          },
+          {
+            "id": "f8a78a8a-1053-4d30-a66c-6fd98bc12eac",
+            "alterId": 0,
+            "email": "675523646@qq.com"
+          },
+          {
+            "id": "2f3a8232-5bce-49d5-b22f-9d8ef1f2cd25",
+            "alterId": 0,
+            "email": "1443898331@qq.com"
+          },
+          {
+            "id": "5a4a7617-d03f-41e8-8b4e-922ffe587903",
+            "alterId": 0,
+            "email": "422121477@qq.com"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "path": "/v2"
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ],
+  "routing": {
+    "settings": {
+      "rules": [
+        {
+          "inboundTag": [
+            "api"
+          ],
+          "outboundTag": "api",
+          "type": "field"
+        }
+      ]
+    },
+    "strategy": "rules"
+  }
+}
