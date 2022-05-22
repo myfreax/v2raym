@@ -1,9 +1,13 @@
 package v2ray
 
 import (
+	"bytes"
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +15,19 @@ import (
 )
 
 var configFilePath string
+
+func Start(config Config) *exec.Cmd {
+	stream, _ := config.ToJSON()
+	service := exec.Command("./xray")
+	service.Stdin = strings.NewReader(stream)
+	var out bytes.Buffer
+	service.Stdout = &out
+	err := service.Start()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return service
+}
 
 type UpdateClient struct {
 	Id        string
@@ -41,7 +58,7 @@ type Inbound struct {
 	Settings Settings
 }
 
-type V2ray struct {
+type Config struct {
 	Log       map[string]interface{} `json:"config"`
 	Stats     map[string]interface{}
 	Api       map[string]interface{}
@@ -52,50 +69,18 @@ type V2ray struct {
 	Routing   map[string]interface{}
 }
 
-func (v2ray *V2ray) AddClient(addClient AddClient) {
-	client := Client{Email: addClient.Email, Id: uuid.NewString(), AlterId: 0, Deleted: false, ExpiredAt: addClient.ExpiredAt}
-	v2ray.Inbounds[0].Settings.Clients = append(v2ray.Inbounds[0].Settings.Clients, client)
+type V2ray struct {
+	Config  Config
+	Service *exec.Cmd
 }
 
-func (v2ray *V2ray) DisableClient(id string) {
-	for _, client := range v2ray.Inbounds[0].Settings.Clients {
-		if client.Id == id {
-			client.Deleted = true
-			client.AlterId = -128
-		}
-	}
-}
-
-func (v2ray *V2ray) EnableClient(updateClient UpdateClient) {
-	for _, client := range v2ray.Inbounds[0].Settings.Clients {
-		if client.Id == updateClient.Id {
-			client.ExpiredAt = updateClient.ExpiredAt
-			client.Deleted = false
-			client.AlterId = 0
-		}
-	}
-}
-
-func (v2ray *V2ray) QueryAllClients() []Client {
-	var clients []Client
-	clients = append(clients, v2ray.Inbounds[0].Settings.Clients...)
-	return clients
-
-}
-
-func (v2ray *V2ray) QueryRemovedClients() []Client {
-	var clients []Client
-	for _, client := range v2ray.Inbounds[0].Settings.Clients {
-		if client.Deleted {
-			clients = append(clients, client)
-		}
-	}
-	return clients
+func (v2ray *V2ray) StartCheckExpiredClientTask() {
+	gocron.Every(1).Day().At("00:00").Do(task, &v2ray)
 }
 
 func task(v2ray *V2ray) {
 	isRestartV2rayService := false
-	for _, client := range v2ray.Inbounds[0].Settings.Clients {
+	for _, client := range v2ray.Config.Inbounds[0].Settings.Clients {
 		expiredTime, _ := time.Parse(time.RFC3339, client.ExpiredAt)
 		if time.Now().Unix() > expiredTime.Unix() {
 			client.Deleted = true
@@ -104,54 +89,102 @@ func task(v2ray *V2ray) {
 		}
 	}
 	if isRestartV2rayService {
-		//restart v2ray service
-
+		v2ray.Service.Process.Kill()
+		Start(v2ray.Config)
 	}
 }
 
-func (v2ray *V2ray) runCheckExpiredTask() {
-	gocron.Every(1).Day().At("00:00").Do(task, &v2ray)
+// config
+
+func (config *Config) AddClient(addClient AddClient) Client {
+	client := Client{Email: addClient.Email, Id: uuid.NewString(), AlterId: 0, Deleted: false, ExpiredAt: addClient.ExpiredAt}
+	config.Inbounds[0].Settings.Clients = append(config.Inbounds[0].Settings.Clients, client)
+	config.Save()
+	return client
 }
 
-func (v2ray *V2ray) ToByteArray() ([]byte, error) {
-	byteArray, err := json.Marshal(v2ray)
+func (config *Config) DisableClient(id string) Client {
+	var c Client
+	for _, client := range config.Inbounds[0].Settings.Clients {
+		if client.Id == id {
+			client.Deleted = true
+			client.AlterId = -128
+			c = client
+		}
+	}
+	config.Save()
+	return c
+}
+
+func (config *Config) EnableClient(updateClient UpdateClient) Client {
+	var c Client
+	for _, client := range config.Inbounds[0].Settings.Clients {
+		if client.Id == updateClient.Id {
+			client.ExpiredAt = updateClient.ExpiredAt
+			client.Deleted = false
+			client.AlterId = 0
+		}
+	}
+	config.Save()
+	return c
+}
+
+func (config *Config) QueryAllClients() []Client {
+	var clients []Client
+	clients = append(clients, config.Inbounds[0].Settings.Clients...)
+	return clients
+
+}
+
+func (config *Config) QueryRemovedClients() []Client {
+	var clients []Client
+	for _, client := range config.Inbounds[0].Settings.Clients {
+		if client.Deleted {
+			clients = append(clients, client)
+		}
+	}
+	return clients
+}
+
+func (config *Config) ToByteArray() ([]byte, error) {
+	byteArray, err := json.Marshal(config)
 	if err != nil {
 		return nil, err
 	}
 	return byteArray, nil
 }
 
-func (v2ray *V2ray) ToJSON() (string, error) {
-	byteArray, err := json.Marshal(v2ray)
+func (config *Config) ToJSON() (string, error) {
+	byteArray, err := json.Marshal(config)
 	if err != nil {
 		return "", err
 	}
 	return string(byteArray[:]), nil
 }
 
-func (v2ray *V2ray) Save() error {
-	byteArray, err := json.Marshal(v2ray)
+func (config *Config) Save() error {
+	byteArray, err := json.Marshal(config)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(configFilePath, byteArray, 0644)
 }
 
-func Create(path string) (V2ray, error) {
+func Create(path string) (Config, error) {
 	configFilePath = path
-	v2ray := V2ray{}
+	config := Config{}
 	file, err := os.Open(path)
 	if err != nil {
-		return v2ray, err
+		return config, err
 	}
 	byteArray, err := ioutil.ReadAll(file)
 	if err != nil {
-		return v2ray, err
+		return config, err
 	}
 
-	err = json.Unmarshal(byteArray, &v2ray)
+	err = json.Unmarshal(byteArray, &config)
 	if err != nil {
-		return v2ray, err
+		return config, err
 	}
-	return v2ray, err
+	return config, err
 }
