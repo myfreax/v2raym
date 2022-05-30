@@ -131,9 +131,11 @@ func (config *Config) EnableClient(updateClient UpdateClient) Client {
 
 func (config *Config) QueryAllClients() []Client {
 	var clients []Client
-	clients = append(clients, config.Inbounds[0].Settings.Clients...)
+	if len(config.Inbounds) > 0 {
+		clients = append(clients, config.Inbounds[0].Settings.Clients...)
+		return clients
+	}
 	return clients
-
 }
 
 func (config *Config) QueryRemovedClients() []Client {
